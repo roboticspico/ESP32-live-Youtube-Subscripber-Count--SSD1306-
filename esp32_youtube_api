@@ -1,0 +1,92 @@
+//In this example, we’re using I2C communication protocol. 
+//The most suitable pins for I2C communication in the ESP32 are GPIO 22 (SCL) and GPIO 21 (SDA).
+
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+
+String channel_name = "..........."; // Youtube channel id
+String api_key = "..........."; // Youtube API key
+
+// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+const char* ssid = "...........";
+const char* password = "...........";
+
+void setup() {
+  Serial.begin(115200);
+
+  WiFi.begin(ssid, password);
+  Serial.println("Connecting");
+  while(WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.print("Connected to WiFi network with IP Address: ");
+  Serial.println(WiFi.localIP());
+
+}
+
+void loop() {  
+  //  Display
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3D for 128x64
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;);
+  }
+  
+  if(WiFi.status()== WL_CONNECTED){
+    HTTPClient client;
+    client.begin("https://www.googleapis.com/youtube/v3/channels?part=statistics&id=" + channel_name + "&key=" + api_key);
+
+    if(client.GET()>0){
+      StaticJsonDocument<768> doc;
+      String payload = client.getString();
+      DeserializationError error = deserializeJson(doc, payload);
+        
+      if (error) {
+        Serial.print("deserializeJson() failed: ");
+        Serial.println(error.c_str());
+        return;
+      }
+      
+      const char* kind = doc["kind"];
+      const char* etag = doc["etag"];
+      
+      int pageInfo_totalResults = doc["pageInfo"]["totalResults"];
+      int pageInfo_resultsPerPage = doc["pageInfo"]["resultsPerPage"];
+      
+      JsonObject items_0 = doc["items"][0];
+      const char* items_0_kind = items_0["kind"];
+      const char* items_0_etag = items_0["etag"]; 
+      const char* items_0_id = items_0["id"];
+      
+      JsonObject items_0_statistics = items_0["statistics"];
+      const char* items_0_statistics_viewCount = items_0_statistics["viewCount"];
+      const char* items_0_statistics_subscriberCount = items_0_statistics["subscriberCount"];
+      bool items_0_statistics_hiddenSubscriberCount = items_0_statistics["hiddenSubscriberCount"];
+      const char* items_0_statistics_videoCount = items_0_statistics["videoCount"];
+
+      Serial.println(items_0_statistics_viewCount);
+
+      // Display
+      display.clearDisplay();
+    
+      display.setTextSize(3);
+      display.setTextColor(WHITE);
+      display.setCursor(5, 20);
+      // Display static text
+      display.println(items_0_statistics_subscriberCount);
+      display.display();
+    }
+  } else {
+    Serial.println("WiFi Disconnected");
+  }
+}
